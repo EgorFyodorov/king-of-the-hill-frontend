@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_NETWORK_NAME: ${VITE_NETWORK_NAME}
+        VITE_CHAIN_ID: ${VITE_CHAIN_ID}
+        VITE_RPC_URL: ${VITE_RPC_URL}
+        VITE_CONTRACT_ADDRESS: ${VITE_CONTRACT_ADDRESS}
+    ports:
+      - "80:80"
+

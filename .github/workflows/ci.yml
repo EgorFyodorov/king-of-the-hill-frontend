@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-frontend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install Dependencies
+      run: npm ci
+    
+    - name: Lint
+      run: npm run lint || true
+    
+    - name: Build
+      run: npm run build
+      env:
+        VITE_CONTRACT_ADDRESS: 0x8F03Df8600B02D3699Be042E3eE1C49968F65FE2

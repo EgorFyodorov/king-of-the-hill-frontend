@@ -1,0 +1,15 @@
+{
+  "abi": [
+    "function king() view returns (address)",
+    "function currentPrize() view returns (uint256)",
+    "function pendingWithdrawals(address) view returns (uint256)",
+    "function claimThrone() payable",
+    "function withdraw()",
+    "function totalClaims() view returns (uint256)",
+    "function claimCount(address) view returns (uint256)",
+    "function feePercentage() view returns (uint256)",
+    "function initializeV2()",
+    "event ThroneClaimed(address indexed previousKing, address indexed newKing, uint256 amount)",
+    "event FeePercentageUpdated(uint256 oldFee, uint256 newFee)"
+  ]
+}
