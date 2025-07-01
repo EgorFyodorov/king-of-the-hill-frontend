@@ -35,6 +35,7 @@ const Home: React.FC = () => {
   const [bidAmount, setBidAmount] = useState<string>('');
   const [minBid, setMinBid] = useState<string>('0');
   const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Calculate minimum bid whenever prize or fee changes
   useEffect(() => {
@@ -44,6 +45,18 @@ const Home: React.FC = () => {
       setMinBid(ethers.formatEther(calculatedMinBid));
     }
   }, [currentPrize, feePercentage]);
+
+  // Auto-retry on error
+  useEffect(() => {
+    if (contractError && contractError.includes('Network is busy') && retryCount < 3) {
+      const timer = setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+        refreshData();
+      }, 3000); // Retry after 3 seconds
+      
+      return () => clearTimeout(timer);
+    }
+  }, [contractError, refreshData, retryCount]);
 
   const handleClaimThrone = async () => {
     if (!service) {
@@ -138,15 +151,28 @@ const Home: React.FC = () => {
     </div>
   );
 
+  // Show loading state
   if (isLoading) {
     return <div className="flex items-center justify-center h-full min-h-screen bg-gradient-to-br from-purple-950 via-purple-800 to-purple-500">
       <div className="text-white text-2xl">Loading...</div>
     </div>;
   }
 
-  if (metaMaskError || contractError) {
+  // Show error state, but not for MetaMask not installed error
+  if (contractError && contractError !== metaMaskError && !contractError.includes('Network is busy')) {
     return <div className="flex items-center justify-center h-full min-h-screen bg-gradient-to-br from-purple-950 via-purple-800 to-purple-500">
-      <div className="text-white text-2xl">Error: {metaMaskError || contractError}</div>
+      <div className="bg-white/10 border border-white/20 rounded-xl shadow-lg p-6 max-w-md w-full text-center">
+        <div className="text-white text-xl mb-4">Error: {contractError}</div>
+        <button 
+          onClick={() => {
+            setRetryCount(0);
+            refreshData();
+          }}
+          className="bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-purple-900 font-bold py-3 px-7 rounded-lg shadow-lg transform transition hover:scale-105 text-base border-2 border-yellow-300"
+        >
+          Retry
+        </button>
+      </div>
     </div>;
   }
 
@@ -155,21 +181,54 @@ const Home: React.FC = () => {
       {showHowToPlay && <HowToPlayModal />}
       <div className="flex-1 flex flex-col justify-center items-center px-2 py-8">
         <h1 className="text-5xl font-extrabold text-center mb-8 text-white drop-shadow-lg tracking-wide">King of the Hill</h1>
-        <div className="flex flex-row justify-center items-center mb-10 gap-4">
-          <button
-            onClick={connect}
-            disabled={!!account || isConnecting}
-            className="bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-purple-900 font-extrabold py-3 px-7 rounded-lg shadow-lg transform transition hover:scale-105 disabled:opacity-50 text-lg border-2 border-yellow-300"
-          >
-            {account ? 'Wallet Connected' : (isConnecting ? 'Connecting...' : 'Connect Wallet')}
-          </button>
-          <button
-            className="px-7 py-3 rounded-lg bg-white/20 text-white hover:bg-white/30 transition font-semibold text-lg border border-white/30"
-            onClick={() => setShowHowToPlay(true)}
-          >
-            How to Play
-          </button>
+        
+        <div className="max-w-5xl w-full mb-8">
+          <div className="flex justify-center">
+            <div className="w-[calc(50%-1px)] flex justify-end pr-2">
+              {metaMaskError ? (
+                <div className="bg-white/10 border border-white/20 rounded-xl shadow-lg p-4 h-12 flex items-center gap-3">
+                  <div className="text-lg font-bold text-yellow-300">MetaMask Required</div>
+                  <a
+                    href="https://metamask.io/download/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-purple-900 font-bold py-2 px-4 rounded-lg shadow-lg transform transition hover:scale-105 text-sm border-2 border-yellow-300"
+                  >
+                    Install MetaMask
+                  </a>
+                </div>
+              ) : (
+                <button
+                  onClick={connect}
+                  disabled={!!account || isConnecting}
+                  className="bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-purple-900 font-extrabold py-3 px-7 rounded-lg shadow-lg transform transition hover:scale-105 disabled:opacity-50 text-lg border-2 border-yellow-300 h-12 flex items-center justify-center"
+                >
+                  {account ? 'Wallet Connected' : (isConnecting ? 'Connecting...' : 'Connect Wallet')}
+                </button>
+              )}
+            </div>
+            <div className="w-[calc(50%-1px)] flex justify-start pl-2">
+              <button
+                className="px-7 py-3 rounded-lg bg-white/20 text-white hover:bg-white/30 transition font-semibold text-lg border border-white/30 h-12 flex items-center justify-center"
+                onClick={() => setShowHowToPlay(true)}
+              >
+                How to Play
+              </button>
+            </div>
+          </div>
         </div>
+        
+        {/* Show network busy warning if applicable */}
+        {contractError && contractError.includes('Network is busy') && (
+          <div className="max-w-5xl w-full mb-6">
+            <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-3 text-center">
+              <p className="text-yellow-200 text-sm">
+                {contractError} {retryCount > 0 ? `(Retry attempt ${retryCount}/3)` : ''}
+              </p>
+            </div>
+          </div>
+        )}
+        
         <div className="max-w-5xl w-full flex flex-col md:flex-row gap-10">
           {/* Current King */}
           <div className="flex-1 min-w-[336px] max-w-xl bg-white/10 border border-white/20 rounded-2xl shadow-xl p-8 mb-6 md:mb-0">
@@ -254,7 +313,7 @@ const Home: React.FC = () => {
               <button
                 onClick={handleWithdraw}
                 disabled={!account || isClaiming || isRefreshing || pendingWithdrawal === BigInt(0)}
-                className="bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-purple-900 font-bold py-3 px-7 rounded-lg shadow-lg transform transition hover:scale-105 disabled:opacity-50 text-base border-2 border-yellow-300"
+                className="bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-purple-900 font-bold py-3 px-7 rounded-lg shadow-lg transform transition hover:scale-105 disabled:opacity-50 text-base border-2 border-yellow-300 flex items-center justify-center"
               >
                 Withdraw Funds
               </button>
@@ -266,7 +325,8 @@ const Home: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="mt-8 text-center text-white/70 text-sm">
+        
+        <div className="mt-4 text-center text-white/70 text-sm">
           <div className="flex justify-center gap-4 items-center">
             <a 
               href="https://github.com/EgorFyodorov/king-of-the-hill-contracts" 

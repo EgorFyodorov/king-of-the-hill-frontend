@@ -56,11 +56,11 @@ export class KingOfTheHillService {
     }
 
     // Public view methods
-  async getCurrentKing(): Promise<string> {
+    async getCurrentKing(): Promise<string> {
         return this.contract.king();
-  }
+    }
 
-  async getCurrentPrize(): Promise<bigint> {
+    async getCurrentPrize(): Promise<bigint> {
         return this.contract.currentPrize();
     }
 
@@ -75,11 +75,11 @@ export class KingOfTheHillService {
     // User-specific view methods
     async getClaimCount(address: string): Promise<bigint> {
         return this.contract.claimCount(address);
-  }
+    }
 
-  async getPendingWithdrawal(address: string): Promise<bigint> {
+    async getPendingWithdrawal(address: string): Promise<bigint> {
         return this.contract.pendingWithdrawals(address);
-  }
+    }
 
     // Transaction methods
     async claimThrone(amount: string): Promise<ethers.ContractTransactionResponse> {
@@ -87,14 +87,14 @@ export class KingOfTheHillService {
         const contractWithSigner = this.contract.connect(this.signer) as IKingOfTheHill & ethers.Contract;
         const tx = await contractWithSigner.claimThrone({ value: ethers.parseEther(amount) });
         return tx;
-  }
+    }
 
-  async withdraw(): Promise<ethers.ContractTransactionResponse> {
+    async withdraw(): Promise<ethers.ContractTransactionResponse> {
         if (!this.signer) throw new Error("Signer is not available. Please connect your wallet.");
         const contractWithSigner = this.contract.connect(this.signer) as IKingOfTheHill & ethers.Contract;
         const tx = await contractWithSigner.withdraw();
         return tx;
-  }
+    }
 
     // Event listeners
     onKingChanged(callback: (previousKing: string, newKing: string, amount: bigint) => void) {

@@ -5,6 +5,9 @@ export const NETWORK = {
   rpcUrl: import.meta.env.VITE_RPC_URL
 };
 
+// Export RPC URL for fallback provider
+export const networkRpcUrl = NETWORK.rpcUrl;
+
 // Contract configuration
 export const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
 

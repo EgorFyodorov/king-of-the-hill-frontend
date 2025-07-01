@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useMetaMask } from '../hooks/useMetaMask';
 import { KingOfTheHillService } from '../utils/kingOfTheHill';
-import { contractAddress } from '../config';
+import { contractAddress, networkRpcUrl } from '../config';
+import { ethers } from 'ethers';
 
 interface KingOfTheHillContextType {
   currentKing: string;
@@ -21,6 +22,35 @@ interface KingOfTheHillContextType {
 
 const KingOfTheHillContext = createContext<KingOfTheHillContextType | undefined>(undefined);
 
+// Helper function to format errors
+const formatError = (err: any): string => {
+  if (typeof err === 'string') return err;
+  
+  const errorMessage = err?.message || 'Unknown error occurred';
+  
+  // Handle common blockchain errors
+  if (errorMessage.includes('Too Many Requests') || errorMessage.includes('-32005')) {
+    return 'Network is busy. Please try again in a moment.';
+  }
+  
+  if (errorMessage.includes('missing response')) {
+    return 'Connection issue with blockchain network. Please try again.';
+  }
+  
+  if (errorMessage.includes('network changed')) {
+    return 'Network changed. Please make sure you are connected to Sepolia testnet.';
+  }
+  
+  if (errorMessage.includes('user rejected') || errorMessage.includes('User denied')) {
+    return 'Transaction rejected by user.';
+  }
+  
+  // Truncate long error messages
+  return errorMessage.length > 100 
+    ? 'Error connecting to blockchain. Please try again later.' 
+    : errorMessage;
+};
+
 export const KingOfTheHillProvider = ({ children }: { children: ReactNode }) => {
   const { provider, signer, account, error: metaMaskError } = useMetaMask();
   
@@ -35,15 +65,54 @@ export const KingOfTheHillProvider = ({ children }: { children: ReactNode }) => 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState<number | null>(null);
 
+  // Effect for service initialization
   useEffect(() => {
-    if (provider) {
-      const serviceInstance = new KingOfTheHillService(contractAddress, provider, signer);
-      setService(serviceInstance);
-    } else {
-      setService(null);
-    }
-  }, [provider, signer]);
+    const initializeService = async () => {
+      try {
+        // If MetaMask is available, use it
+        if (provider) {
+          const serviceInstance = new KingOfTheHillService(contractAddress, provider, signer);
+          setService(serviceInstance);
+        } 
+        // If MetaMask is not available or there's an error, create a read-only provider
+        else {
+          if (!networkRpcUrl) {
+            setError("No RPC URL available to connect to the blockchain.");
+            setIsLoading(false);
+            return;
+          }
+          
+          try {
+            // Create a fallback provider using the RPC URL from config
+            const fallbackProvider = new ethers.JsonRpcProvider(networkRpcUrl);
+            
+            // Test the provider connection
+            await fallbackProvider.getNetwork();
+            
+            const readOnlyService = new KingOfTheHillService(contractAddress, fallbackProvider);
+            setService(readOnlyService);
+          } catch (err) {
+            setError(formatError(err));
+            setIsLoading(false);
+          }
+        }
+      } catch (err) {
+        setError(formatError(err));
+        setIsLoading(false);
+      }
+    };
+    
+    initializeService();
+
+    // Cleanup function
+    return () => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
+    };
+  }, [provider, signer, metaMaskError]);
 
   const refreshData = useCallback(async () => {
     if (!service) return;
@@ -51,33 +120,43 @@ export const KingOfTheHillProvider = ({ children }: { children: ReactNode }) => 
     setIsRefreshing(true);
     setError(null);
     try {
-      // Fetch general data
-      const [king, prize, claims, fee] = await Promise.all([
-        service.getCurrentKing(),
-        service.getCurrentPrize(),
-        service.getTotalClaims(),
-        service.getFeePercentage(),
-      ]);
+      // Fetch general data with sequential calls to avoid rate limiting
+      const king = await service.getCurrentKing();
       setCurrentKing(king);
+      
+      // Small delay between calls
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const prize = await service.getCurrentPrize();
       setCurrentPrize(prize);
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const claims = await service.getTotalClaims();
       setTotalClaims(claims);
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const fee = await service.getFeePercentage();
       setFeePercentage(fee);
 
       // Fetch user-specific data if connected
       if (account) {
-        const [userClaims, userWithdrawal] = await Promise.all([
-          service.getClaimCount(account),
-          service.getPendingWithdrawal(account),
-        ]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const userClaims = await service.getClaimCount(account);
         setClaimCount(userClaims);
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const userWithdrawal = await service.getPendingWithdrawal(account);
         setPendingWithdrawal(userWithdrawal);
       } else {
         setClaimCount(BigInt(0));
         setPendingWithdrawal(BigInt(0));
       }
     } catch (e: any) {
-      console.error("Failed to refresh contract data:", e);
-      setError("Could not fetch data from contract. Are you on the right network?");
+      setError(formatError(e));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -87,15 +166,25 @@ export const KingOfTheHillProvider = ({ children }: { children: ReactNode }) => 
   useEffect(() => {
     if (service) {
       refreshData();
-      // Optional: Set up an interval to refresh data periodically
-      const interval = setInterval(refreshData, 15000); // every 15 seconds
-      return () => clearInterval(interval);
+      
+      // Set up an interval to refresh data periodically
+      // Use a longer interval to avoid rate limiting
+      const interval = window.setInterval(refreshData, 30000); // every 30 seconds
+      setRefreshInterval(interval);
+      
+      return () => {
+        clearInterval(interval);
+      };
     }
-  }, [service]);
+  }, [service, refreshData]);
 
   useEffect(() => {
-      if (metaMaskError) {
-          setError(metaMaskError);
+      // Only set error for critical MetaMask errors, not for "not installed"
+      if (metaMaskError && metaMaskError !== 'MetaMask is not installed.') {
+          setError(formatError(metaMaskError));
+          setIsLoading(false);
+      } else if (metaMaskError === 'MetaMask is not installed.') {
+          // Just stop loading but don't set error
           setIsLoading(false);
       }
   }, [metaMaskError]);
