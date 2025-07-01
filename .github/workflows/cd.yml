@@ -39,6 +39,7 @@ jobs:
         host: ${{ secrets.VDS_HOST }}
         username: ${{ secrets.VDS_USERNAME }}
         key: ${{ secrets.VDS_SSH_KEY }}
+        passphrase: ${{ secrets.VDS_SSH_PASSPHRASE }}
         script: |
           # Stop old container
           docker stop king-of-the-hill-frontend || true
